@@ -18,6 +18,7 @@ from telegram.ext import Application, CallbackQueryHandler, InlineQueryHandler, 
 
 from . import account, welcome
 from .config import Config
+from .group_pvp import GroupPvP, PHOTO_COMMANDS
 from .source_export import source_zip
 from .domain import MAX_PVP_WAGER, MIN_PVP_WAGER, USD_TO_COIN_RATE, RuleError, cents, money, usd_to_coins
 from .mongo_store import MongoStore
@@ -57,6 +58,9 @@ OWNER_ACTIONS = {
     "debit": "USD debit: /debit USER_ID $10 note သို့ reply /debit -$10 note",
     "wallet": "User coin wallet စစ်ရန်: /wallet USER_ID",
     "walletmode": "Bid ငွေကို ယာယီထိန်းထားရန်: /walletmode on",
+    "startphoto": "PvP ပွဲဖွင့်ပုံ ပြင်ရန်: /startphoto",
+    "stopphoto": "PvP လောင်းကြေးပိတ်ပုံ ပြင်ရန်: /stopphoto",
+    "resultphoto": "PvP ရလဒ်ပုံ ပြင်ရန်: /resultphoto",
 }
 OWNER_ONLY_COMMANDS = (set(OWNER_ACTIONS) - {"auctions", "rules"}) | {
     "panel", "help", "draftcancel", "welcomehelp", "welcomecancel",
@@ -78,8 +82,7 @@ AUCTION_GROUP_COMMANDS = [
 ]
 PVP_GROUP_COMMANDS = [
     BotCommand("bid", "Auction ID နဲ့ bid ဆွဲရန်: /bid AUCTION_ID 10.50"),
-    BotCommand("pvp", "Reply duel သို့ coin flip: /pvp 250 h/t"),
-    BotCommand("boom", "ပြိုင်ဘက်ကို Boom game စိန်ခေါ်ရန်"),
+    BotCommand("pvp", "လက်ရှိပွဲတွင် လောင်းရန်: /pvp 250 h/l"),
     BotCommand("replay", "Stuck ဖြစ်နေသော ကိုယ့် Solo game ကို refund/ရှင်းရန်"),
     BotCommand("btop", "Coin အများဆုံး Top 10"),
     BotCommand("bal", "ကိုယ့် coin လက်ကျန်စစ်ရန်"),
@@ -358,6 +361,7 @@ class AuctionBot:
         self.pvp_edit_after = 0
         self.pvp_render_retry = {}
         self.tick_lock = asyncio.Lock()
+        self.group_pvp = GroupPvP(self)
 
     async def store_call(self, operation, *args, **kwargs):
         """Keep synchronous MongoDB I/O off the asyncio event loop; SQLite stays local."""
@@ -556,7 +560,9 @@ class AuctionBot:
                     await self.auth_command(signed_args, message, update.effective_user.id, context.bot)
                     return
             if self.owner(update):
-                if context.user_data.get("welcome_edit") and command not in set(OWNER_ACTIONS) | {"welcomecancel", "welcomehelp", "panel", "start", "help", "draftcancel"}:
+                if context.user_data.get("pvp_photo_edit") and not command:
+                    await self.pvp_photo_input(message, context)
+                elif context.user_data.get("welcome_edit") and command not in set(OWNER_ACTIONS) | {"welcomecancel", "welcomehelp", "panel", "start", "help", "draftcancel"}:
                     await self.welcome_input(message, update.effective_user, context)
                 elif command:
                     await self.owner_command(command, args, message, context)
@@ -584,13 +590,11 @@ class AuctionBot:
                 elif command in {"menu", "history", "wins", "auctions", "balance", "bal", "bcoin", "transactions"}:
                     await self.user_command(command, args, message, update.effective_user)
                 return
-            if self.pvp_group(update) and command in {"dailycoin", "pvp", "boom", "replay", "btop", "bal", "bcoin"}:
+            if self.pvp_group(update) and command in {"dailycoin", "pvp", "replay", "btop", "bal", "bcoin"}:
                 if command == "dailycoin":
                     await self.user_command(command, args, message, update.effective_user)
                 elif command == "pvp":
-                    await self.pvp_request(args, message, update.effective_user)
-                elif command == "boom":
-                    await self.boom_request(args, message, update.effective_user)
+                    await self.pvp_request(args, message, update.effective_user, context)
                 elif command == "replay":
                     await self.replay_command(args, message, update.effective_user)
                 elif command == "btop":
@@ -715,101 +719,10 @@ class AuctionBot:
         else:
             await message.reply_text("ဒီ coin gift ကို အရင်က လုပ်ပြီးပါပြီ။ ထပ်မံလွှဲ၍မရပါ။")
 
-    async def pvp_request(self, args, message, user):
-        if not user or user.is_bot:
-            raise RuleError("Telegram user account နဲ့ပဲ PvP ကစားနိုင်ပါတယ်။")
-        remaining = self.game_cooldown(user)
-        if remaining:
-            raise RuleError(f"တစ်ပွဲပြီးပါပြီ။ {remaining:.1f} sec စောင့်ပြီးမှ ထပ်ကစားပါ။")
-        reply = message.reply_to_message
-        target = reply.from_user if reply and not reply.sender_chat else None
-        if not target and len(args) == 2:
-            amount = cents(args[0])
-            choice = {"h": "heads", "heads": "heads", "t": "tails", "tails": "tails"}.get(args[1].lower())
-            if not choice:
-                raise RuleError("Solo PvP အတွက် /pvp 250 h သို့ /pvp 250 t ပုံစံရေးပါ။ h=Heads, t=Tails")
-            if not MIN_PVP_WAGER <= amount <= MAX_PVP_WAGER:
-                raise RuleError("PvP လောင်းကြေးကို 250 မှ 30000 coin အတွင်းထားပါ။")
-            result = secrets.choice(("heads", "tails"))
-            game_id = secrets.token_hex(8)
-            game = await self.store_call(self.store.play_solo_pvp, game_id, message.chat_id,
-                                         user.id, user.full_name, amount, choice, result)
-            coin_message = await message.reply_text("🪙")
-            await coin_message.reply_text(pvp_animation_text(game), parse_mode="HTML")
-            self.arm_game_cooldown(user)
-            return
-        if len(args) != 1:
-            raise RuleError("ပြိုင်ဘက်ရဲ့ message ကို reply လုပ်ပြီး /pvp 500 သို့မဟုတ် ပိုများသော coin ပမာဏရေးပါ။")
-        if not target or target.is_bot:
-            raise RuleError("PvP လုပ်မယ့် user ရဲ့ message ကို reply လုပ်ပါ။")
-        if target.id == user.id:
-            raise RuleError("ကိုယ့်ကိုယ်ကို PvP request လုပ်လို့မရပါ။")
-        amount = cents(args[0])
-        if not MIN_PVP_WAGER <= amount <= MAX_PVP_WAGER:
-            raise RuleError("PvP လောင်းကြေးကို 250 မှ 30000 coin အတွင်းထားပါ။")
-        game_id = secrets.token_hex(8)
-        game = await self.store_call(self.store.create_pvp, game_id, message.chat_id,
-                                     user.id, user.full_name, target.id, target.full_name, amount)
-        markup = InlineKeyboardMarkup([[
-            button("✅ Confirm", f"pvp:confirm:{game_id}", "success"),
-            button("❌ Cancel", f"pvp:cancel:{game_id}", "danger"),
-        ]])
-        text = (f'⚔️ PvP စိန်ခေါ်မှု\n\n{pvp_name(user.id,user.full_name)}\n'
-                f'🪙 လောင်းကြေး: <b>{money(amount)}</b> တစ်ယောက်စီ\n'
-                f'ပြိုင်ဘက်: {pvp_name(target.id,target.full_name)}\n\n'
-                f'{pvp_name(target.id,target.full_name)} က Confirm Waiting။ 15sec အတွင်း မနှိပ်ပါက ပွဲပယ်ပါမယ်။ '
-                '___________________________')
-        try:
-            posted = await message.reply_text(text, parse_mode="HTML", reply_markup=markup)
-            await self.store_call(self.store.set_pvp_message, game["id"], posted.message_id)
-            self.arm_game_cooldown(user)
-        except Exception:
-            try:
-                await self.store_call(self.store.cancel_pvp, game["id"], user.id)
-            except Exception:
-                pass
-            raise
-
-    async def boom_request(self, args, message, user):
-        if not user or user.is_bot:
-            raise RuleError("Telegram user account နဲ့ပဲ Boom ကစားနိုင်ပါတယ်။")
-        remaining = self.game_cooldown(user)
-        if remaining:
-            raise RuleError(f"တစ်ပွဲပြီးပါပြီ။ {remaining:.1f} sec စောင့်ပြီးမှ ထပ်ကစားပါ။")
-        if len(args) != 1:
-            raise RuleError("Solo အတွက် /boom 250၊ 2-player အတွက် ပြိုင်ဘက် message ကို reply လုပ်ပြီး /boom 250 ပုံစံရေးပါ။")
-        reply=message.reply_to_message
-        target=reply.from_user if reply and not reply.sender_chat else None
-        amount=cents(args[0])
-        if not MIN_PVP_WAGER <= amount <= MAX_PVP_WAGER:
-            raise RuleError("Boom လောင်းကြေးကို 250 မှ 30000 coin အတွင်းထားပါ။")
-        if not target:
-            game_id=secrets.token_hex(8)
-            game=await self.store_call(self.store.create_solo_boom,game_id,message.chat_id,
-                                       user.id,user.full_name,amount)
-            await message.reply_text(boom_text(game),parse_mode="HTML",reply_markup=boom_markup(game))
-            self.arm_game_cooldown(user)
-            return
-        if target.is_bot:
-            raise RuleError("Bot message ကို reply လုပ်ပြီး Boom မကစားနိုင်ပါ။")
-        if target.id == user.id: raise RuleError("ကိုယ့်ကိုယ်ကို Boom request လုပ်လို့မရပါ။")
-        game_id=secrets.token_hex(8)
-        game=await self.store_call(self.store.create_boom,game_id,message.chat_id,user.id,user.full_name,target.id,target.full_name,amount)
-        markup=InlineKeyboardMarkup([[
-            button("✅ Confirm",f"boom:confirm:{game_id}","success"),
-            button("❌ Cancel",f"boom:cancel:{game_id}","danger")]])
-        text=(f'💣 Boom စိန်ခေါ်မှု\n\n{pvp_name(user.id,user.full_name)}\n'
-              f'🪙 လောင်းကြေး: <b>{money(amount)}</b> တစ်ယောက်စီ\n'
-              f'ပြိုင်ဘက်: {pvp_name(target.id,target.full_name)}\n\n'
-              f'{pvp_name(target.id,target.full_name)} က Confirm Waiting။ 15sec အတွင်း မနှိပ်ပါက ပွဲပယ်ပါမယ်။')
-        try:
-            posted=await message.reply_text(text,parse_mode="HTML",reply_markup=markup)
-            await self.store_call(self.store.set_boom_message,game_id,posted.message_id)
-            self.arm_game_cooldown(user)
-        except Exception:
-            try: await self.store_call(self.store.cancel_boom,game_id,user.id)
-            except Exception: pass
-            raise
+    async def pvp_request(self, args, message, user, context=None):
+        application = getattr(context, "application", None)
+        create_task = application.create_task if application else asyncio.create_task
+        await self.group_pvp.bet(args, message, user, create_task)
 
     async def replay_command(self, args, message, user):
         if not user or user.is_bot:
@@ -823,7 +736,7 @@ class AuctionBot:
         refunded = sum(game.get("amount", 0) for game in games)
         await message.reply_text(
             f"✅ Stuck Solo game {len(games)} ပွဲကို ရှင်းပြီး {money(refunded)} refund ပြန်ထည့်ပေးပါပြီ။\n"
-            "အခု /boom သို့ /pvp နဲ့ ပြန်ကစားနိုင်ပါပြီ။")
+            "ပွဲဖွင့်ချိန်မှာ /pvp 250 h သို့ /pvp 250 l နဲ့ လောင်းနိုင်ပါတယ်။")
 
     async def btop_command(self, args, message, context):
         if args: raise RuleError("/btop ကို argument မပါဘဲ သုံးပါ။")
@@ -901,7 +814,32 @@ class AuctionBot:
         else:
             await message.reply_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
 
+    async def pvp_photo_input(self, message, context):
+        stage = context.user_data["pvp_photo_edit"]
+        if not message.photo:
+            await message.reply_text("ဓာတ်ပုံအဖြစ် ပို့ပါ။ ရပ်ရန် /panel ကိုသုံးပါ။")
+            return
+        await self.store_call(self.store.set, f"pvp_{stage}_photo", message.photo[-1].file_id)
+        context.user_data.pop("pvp_photo_edit", None)
+        await message.reply_text(f"✅ PvP {stage.title()} Photo သိမ်းပြီးပါပြီ။")
+
     async def owner_command(self, command, args, message, context):
+        if command in PHOTO_COMMANDS:
+            if args and args != ["clear"]:
+                raise RuleError(f"/{command} သို့ /{command} clear ကိုသုံးပါ။")
+            stage = PHOTO_COMMANDS[command]
+            context.user_data.pop("draft", None)
+            context.user_data.pop("welcome_edit", None)
+            if args == ["clear"]:
+                await self.store_call(self.store.set, f"pvp_{stage}_photo", "")
+                context.user_data.pop("pvp_photo_edit", None)
+                await message.reply_text(f"✅ PvP {stage.title()} Photo ဖယ်ပြီးပါပြီ။")
+            else:
+                context.user_data["pvp_photo_edit"] = stage
+                await message.reply_text(f"📷 PvP {stage.title()} Photo ပို့ပါ။ ရပ်ရန် /panel။")
+            return
+        if command in {"panel", "start", "help", "new", "welcome", "draftcancel"}:
+            context.user_data.pop("pvp_photo_edit", None)
         if command in {"menu", "history", "wins", "balance", "bal", "transactions"}:
             await self.user_command(command, args, message, message.from_user)
             return
@@ -980,6 +918,7 @@ class AuctionBot:
                 self.channel_id = str(chat_id)
             else:
                 self.group_id = str(chat_id)
+                self.pvp_group_id = self.group_id
             result = "✅ သိမ်းပြီးပါပြီ။ /check နဲ့ ချိတ်ဆက်မှု စစ်ပါ။"
         elif command == "increment":
             await self.store_call(self.store.set, "increment", cents(args[0]))
@@ -1176,68 +1115,8 @@ class AuctionBot:
         if remaining:
             await query.answer(f"ခဏစောင့်ပါ ({remaining:.1f} sec)", show_alert=True)
             return
-        if (query.data or "").startswith("boom:"):
-            if not self.pvp_group(update) or not update.effective_user or update.effective_user.is_bot:
-                await query.answer("Boom ကို သတ်မှတ်ထားတဲ့ game group မှာပဲ သုံးနိုင်ပါတယ်။", show_alert=True)
-                return
-            try:
-                parts=query.data.split(":")
-                action,game_id=parts[1],parts[2]
-                if action == "confirm":
-                    game=await self.store_call(self.store.accept_boom,game_id,update.effective_user.id)
-                    await query.answer("Boom ပွဲ စတင်ပါပြီ။")
-                    await query.edit_message_text(boom_text(game),parse_mode="HTML",reply_markup=boom_markup(game))
-                elif action == "cancel":
-                    game=await self.store_call(self.store.cancel_boom,game_id,update.effective_user.id)
-                    await query.answer("Boom request ကို ဖျက်သိမ်းပြီးပါပြီ။")
-                    await query.edit_message_text(f'❌ Boom request ပယ်ဖျက်ပြီးပါပြီ။\n{pvp_name(game["requester_id"],game["requester_name"])} · {pvp_name(game["target_id"],game["target_name"])}',parse_mode="HTML")
-                elif action == "cash":
-                    game=await self.store_call(self.store.cash_boom,game_id,update.effective_user.id)
-                    await query.answer("Cash ထုတ်ပြီးပါပြီ။")
-                    await query.edit_message_text(boom_text(game),parse_mode="HTML",reply_markup=boom_markup(game))
-                elif action == "pick" and len(parts)==4:
-                    game=await self.store_call(self.store.pick_boom,game_id,update.effective_user.id,int(parts[3]))
-                    await query.answer("Boom!" if game["status"]=="finished" else "Safe button ပါ။")
-                    if game["status"] == "finished":
-                        await query.edit_message_text(boom_text(game),parse_mode="HTML",reply_markup=boom_markup(game))
-                    else:
-                        await query.edit_message_text(boom_text(game),parse_mode="HTML",reply_markup=boom_markup(game))
-                else:
-                    await query.answer("လုပ်ဆောင်ချက် မမှန်ပါ။",show_alert=True)
-            except (RuleError,ValueError) as exc:
-                await query.answer(str(exc) if isinstance(exc,RuleError) else "Boom request မမှန်ပါ။",show_alert=True)
-            except (PyMongoError,TelegramError):
-                await query.answer("Boom game ယာယီမရနိုင်ပါ။ ခဏနေ ပြန်စမ်းပါ။",show_alert=True)
-            return
-        if (query.data or "").startswith("pvp:"):
-            if not self.pvp_group(update) or not update.effective_user or update.effective_user.is_bot:
-                await query.answer("သတ်မှတ်ထားတဲ့ PvP group မှာပဲ သုံးနိုင်ပါတယ်။", show_alert=True)
-                return
-            try:
-                _, action, game_id = query.data.split(":", 2)
-                if action == "confirm":
-                    percent = secrets.randbelow(98) + 1
-                    if percent >= 50:
-                        percent += 1
-                    game = await self.store_call(self.store.accept_pvp, game_id,
-                                                 update.effective_user.id, percent)
-                    await query.answer("PvP ပွဲ စတင်ပါပြီ။")
-                    await query.edit_message_text(pvp_animation_text(game), parse_mode="HTML")
-                elif action == "cancel":
-                    game = await self.store_call(self.store.cancel_pvp, game_id,
-                                                 update.effective_user.id)
-                    await query.answer("PvP request ကို ပယ်ချ/ဖျက်သိမ်းပြီးပါပြီ။")
-                    await query.edit_message_text(
-                        f'❌ PvP request ကို ဖျက်သိမ်းပြီးပါပြီ။\n{pvp_name(game["requester_id"],game["requester_name"])} · '
-                        f'{pvp_name(game["target_id"],game["target_name"])}', parse_mode="HTML")
-                else:
-                    await query.answer("လုပ်ဆောင်ချက် မမှန်ပါ။", show_alert=True)
-            except (RuleError, ValueError) as exc:
-                await query.answer(str(exc) if isinstance(exc, RuleError) else "Request မမှန်ပါ။", show_alert=True)
-            except PyMongoError:
-                await query.answer("Database ယာယီမရနိုင်ပါ။ ခဏနေ ပြန်စမ်းပါ။", show_alert=True)
-            except TelegramError:
-                log.warning("PvP callback message update failed")
+        if (query.data or "").startswith(("boom:", "pvp:")):
+            await query.answer("ဒီ game အဟောင်း ပိတ်ပြီးပါပြီ။ /pvp 250 h သို့ /pvp 250 l ကိုသုံးပါ။", show_alert=True)
             return
         if (query.data or "").startswith("user:"):
             if not update.effective_chat or update.effective_chat.type != "private" or not update.effective_user or update.effective_user.is_bot:
@@ -1297,7 +1176,7 @@ class AuctionBot:
                 await self.welcome_action(value, query.message, update.effective_user, context)
                 return
             if kind == "action":
-                if value in {"new", "auctions", "pause", "resume", "banned", "stats", "rules", "settings", "check", "welcome"}:
+                if value in {"new", "auctions", "pause", "resume", "banned", "stats", "rules", "settings", "check", "welcome"} | set(PHOTO_COMMANDS):
                     await self.owner_command(value, [], query.message, context)
                 elif value in OWNER_ACTIONS:
                     await query.message.reply_text(OWNER_ACTIONS[value])
@@ -1422,106 +1301,9 @@ class AuctionBot:
                 self.last_caption_at[row["id"]] = time.monotonic()
 
             await self.announce_winners(context)
-            await self.tick_pvp(context)
 
     async def tick_pvp(self, context):
-        expired = await self.store_call(self.store.expire_pvp)
-        for game in expired:
-            if not game.get("message_id"):
-                continue
-            try:
-                await context.bot.edit_message_text(
-                    chat_id=game["group_id"], message_id=game["message_id"],
-                    text=(f'❌ PvP request 15sec အတွင်း Confirm မလုပ်သဖြင့် အလိုအလျောက် ပယ်ဖျက်ပြီးပါပြီ။\n\n'
-                          f'{pvp_name(game["requester_id"], game["requester_name"])} · '
-                          f'{pvp_name(game["target_id"], game["target_name"])}'),
-                    parse_mode="HTML")
-            except TelegramError:
-                log.warning("Expired PvP request message update failed for round %s", game["id"])
-        expired_boom = await self.store_call(self.store.expire_boom)
-        for game in expired_boom:
-            if not game.get("message_id"):
-                continue
-            try:
-                await context.bot.edit_message_text(
-                    chat_id=game["group_id"], message_id=game["message_id"],
-                    text=(f'❌ Boom request 15sec အတွင်း Confirm မလုပ်သဖြင့် အလိုအလျောက် ပယ်ဖျက်ပြီးပါပြီ။\n\n'
-                          f'{pvp_name(game["requester_id"],game["requester_name"])} · '
-                          f'{pvp_name(game["target_id"],game["target_name"])}'), parse_mode="HTML")
-            except TelegramError:
-                log.warning("Expired Boom request message update failed for round %s", game["id"])
-        timed_out_boom = await self.store_call(self.store.timeout_boom)
-        for game in timed_out_boom:
-            if not game.get("message_id"):
-                continue
-            try:
-                await context.bot.edit_message_text(
-                    chat_id=game["group_id"], message_id=game["message_id"],
-                    text=boom_text(game), parse_mode="HTML", reply_markup=boom_markup(game))
-            except TelegramError:
-                log.warning("Boom turn timeout message update failed for round %s", game["id"])
-        now = time.monotonic()
-        for game_id, retry in list(self.pvp_render_retry.items()):
-            if now < retry["after"]:
-                continue
-            game = retry["game"]
-            try:
-                await context.bot.edit_message_text(
-                    chat_id=game["group_id"], message_id=game["message_id"],
-                    text=pvp_animation_text(game), parse_mode="HTML")
-            except RetryAfter as exc:
-                delay = exc.retry_after.total_seconds() if hasattr(exc.retry_after, "total_seconds") else exc.retry_after
-                retry["after"] = time.monotonic() + delay + 1
-                self.pvp_edit_after = retry["after"]
-            except TelegramError:
-                retry["after"] = time.monotonic() + 10
-            else:
-                self.pvp_edit_after = time.monotonic() + 1.5
-                self.pvp_render_retry.pop(game_id, None)
-
-        due_rounds = await self.store_call(self.store.due_pvp)
-        for due in due_rounds:
-            if due["id"] in self.pvp_render_retry or time.monotonic() < self.pvp_edit_after:
-                continue
-            game = None
-            try:
-                game = await self.store_call(self.store.advance_pvp, due["id"])
-                await context.bot.edit_message_text(
-                    chat_id=game["group_id"], message_id=game["message_id"],
-                    text=pvp_animation_text(game), parse_mode="HTML")
-                self.pvp_edit_after = time.monotonic() + 1.5
-            except RetryAfter as exc:
-                delay = exc.retry_after.total_seconds() if hasattr(exc.retry_after, "total_seconds") else exc.retry_after
-                self.pvp_render_retry[due["id"]] = {"game": game, "after": time.monotonic() + delay + 1}
-                self.pvp_edit_after = self.pvp_render_retry[due["id"]]["after"]
-            except BadRequest as exc:
-                if "message is not modified" not in str(exc).lower():
-                    log.warning("PvP message edit rejected for round %s", due["id"])
-                    self.pvp_render_retry[due["id"]] = {"game": game, "after": time.monotonic() + 10}
-            except (RuleError, PyMongoError, TelegramError):
-                log.warning("PvP animation/settlement update failed for round %s", due["id"])
-                if game is not None:
-                    self.pvp_render_retry[due["id"]] = {"game": game, "after": time.monotonic() + 10}
-        now = time.monotonic()
-        notifications = await self.store_call(self.store.pending_pvp_slot_notifications)
-        for game in notifications:
-            if now < self.pvp_slot_retry_after.get(game["id"], 0):
-                continue
-            try:
-                await context.bot.send_message(
-                    chat_id=game["group_id"],
-                    text="✅ 1Round Can Be Start")
-            except RetryAfter as exc:
-                delay = exc.retry_after.total_seconds() if hasattr(exc.retry_after, "total_seconds") else exc.retry_after
-                self.pvp_slot_retry_after[game["id"]] = now + delay + 1
-            except TelegramError:
-                self.pvp_slot_retry_after[game["id"]] = now + 30
-                log.warning("PvP slot notification failed for round %s", game["id"])
-            except PyMongoError:
-                log.warning("PvP notification state unavailable for round %s", game["id"])
-            else:
-                await self.store_call(self.store.mark_pvp_slot_notified, game["id"])
-                self.pvp_slot_retry_after.pop(game["id"], None)
+        await self.group_pvp.tick(context)
 
     async def error(self, update, context):
         # Avoid logging Telegram URLs/tokens, message bodies, or bidder identities.
@@ -1571,6 +1353,8 @@ class AuctionBot:
         app.add_handler(CallbackQueryHandler(self.callback))
         app.add_handler(InlineQueryHandler(self.inline_search))
         app.add_error_handler(self.error)
+        app.job_queue.run_repeating(self.tick_pvp, interval=WORKER_TICK_INTERVAL_SECONDS,
+                                    first=5, job_kwargs={"max_instances": 1, "coalesce": True})
         app.job_queue.run_repeating(self.tick, interval=WORKER_TICK_INTERVAL_SECONDS,
                                     first=1, job_kwargs={"max_instances": 1, "coalesce": True})
         return app

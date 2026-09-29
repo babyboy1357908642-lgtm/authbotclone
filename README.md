@@ -4,11 +4,11 @@ Telegram waifu ကဒ်လေလံနှင့် PvP bot — လေလံ bid
 
 ## ပါဝင်သော စနစ်များ
 
-- Owner-only private admin panel၊ လုပ်ဆောင်ချက် **၂၈**။ “owner plan” ကို admin panel လို့ယူဆထားသည်။
+- Owner-only private admin panel နှင့် PvP Start / Stop / Result photo settings။ “owner plan” ကို admin panel လို့ယူဆထားသည်။
 - `/new` → photo → card name → anime name → rarity → starting bid → တင်ပြီးပိတ်မည့် ကြာချိန် (`1sec`, `5min`, `1hours`, `1day`) → preview → Publish။
 - Owner သတ်မှတ်ထားသော channel ထဲ photo post တင်ပေးသည်။
 - အဲဒီ channel နှင့်ချိတ်ထားသော discussion supergroup ရဲ့ auction comments ထဲမှာ `/bid 10.50`။
-- လေလံအတွက် discussion group နှင့် PvP အတွက် သီးခြား game group သတ်မှတ်နိုင်သည်။ အခြား groups ကို မတုံ့ပြန်ပါ။ PvP group မှာ `/pvp`, `/boom`, `/btop`, `/author`, `/bal`, `/bcoin` သုံးနိုင်သည်။ `/boom` သည် player တစ်ယောက်စီအတွက် Boom တစ်ခုပါသော 6/9-button game ဖြစ်ပြီး safe button နှိပ်လျှင် အခြား player အလှည့်ပြောင်းသည်။ `/btop` က coin အများဆုံး Top 10 ကိုပြသည်။ `/author` က Active auctions စာရင်းနှင့် `🔎 Search Auth` inline search ခလုတ်ကို ပြပေးသည်။ လေလံမရှိသေးလျှင်လည်း `Active auctions — 0` နှင့် ခလုတ်ကို ပြပေးသည်။ `/bcoin` က reply လုပ်ထားသူကို coin gift ပို့သည်။ Non-owner private chats မှာ `/start` welcome နှင့် ကိုယ်ပိုင် account commands ကိုသုံးနိုင်သည်။ Owner admin commands ကို private chat မှာသုံးပါ။ `/auth` ကို owner က သတ်မှတ်ထားသော discussion group မှာလည်း သုံးနိုင်သည်။
+- `GROUP_ID` discussion supergroup ထဲမှာ shared PvP round အလိုအလျောက်ဖွင့်သည်။ `/pvp 1000 h` သို့ `/pvp 500 l` ဖြင့် ဝင်လောင်းနိုင်သည်။ `/boom` နှင့် ယခင် duel/coin-flip mode ကို ဖယ်ထားသည်။ `/btop`, `/author`, `/bal`, `/bcoin`, daily rewards နှင့် auction/account features များ ဆက်သုံးနိုင်သည်။
 - Bid လက်ခံပြီး user ကို receipt ကို ချက်ချင်းပြန်ပို့သည်။ Channel caption ကို ပုံမှန်အားဖြင့် နောက် worker tick (**၀.၅ စက္ကန့်အတွင်း**) ပြင်ပြီး ဆက်တိုက် bids များကို နောက်ဆုံး bid မှ **၂ စက္ကန့်ငြိမ်မှ** တစ်ခါတည်း update လုပ်သည်။ Telegram rate limit / network error ရှိရင် နောက်ကျနိုင်သည်။ မပြောင်းလဲသည့် post ကို ထပ်မပြင်ပါ။
 - Bid ရောက်လာချိန်အလိုက် database transaction ဖြင့် လက်ခံသည်။ တူညီသည့် bid ပမာဏကို ပြိုင်ဆွဲလျှင် ပထမ commit ဖြစ်သူ အနိုင်ရသည်။
 - End time အတိအကျရောက်လျှင် bid မလက်ခံတော့ပါ။ နောက် worker tick မှာ winner ကို မူရင်း post ထဲပြပေးသည်။ Bid မရှိပါက winner မရှိပါ။
@@ -100,7 +100,7 @@ Channel ရဲ့ card post ကိုဖွင့် → **Comments** ကို�
 - Owner နှင့် user နှစ်မျိုးလုံး ကိုယ်ပိုင် Telegram account ဖြင့် မူရင်း post Comments မှာ bid ဆွဲနိုင်သည်။ Owner ကိုလည်း balance လုံလောက်မှု၊ minimum bid၊ wallet hold နှင့် deadline စည်းမျဉ်းများ အတူတူသတ်မှတ်သည်။ Anonymous admin / channel identity / bot accounts သည် bid မဆွဲနိုင်ပါ။
 - Comment thread ထဲ `/rules` နဲ့ owner သတ်မှတ်ထားသောစည်းကမ်းကို ဖတ်နိုင်သည်။
 
-## Owner panel — လုပ်ဆောင်ချက် ၂၈
+## Owner panel
 
 `/panel` ခလုတ်တွေက ချက်ချင်းလုပ်ဆောင်ပေးခြင်း သို့မဟုတ် လိုအပ်သော command parameters ကိုပြပေးခြင်း ဖြစ်သည်။
 
@@ -132,20 +132,45 @@ Channel ရဲ့ card post ကိုဖွင့် → **Comments** ကို�
 | 24 | `/wallet USER_ID` | User wallet ကို owner စစ် |
 | 25 | `/walletmode on` / `/walletmode off` | လေလံအသစ်များတွင် wallet လို/မလို သတ်မှတ် |
 | 26 | `/auth` | User ကို reply သို့ numeric ID ဖြင့် USD ပမာဏပေးပြီး coin ပြောင်းထည့်/နုတ် |
-| 27 | `/setpvpgp -100…` | PvP ကစားမည့် supergroup သတ်မှတ်ရန် (owner DM မှသာ) |
+| 27 | `/payout` | Game payout စုစုပေါင်း |
 | 28 | `/zip` | Bot source code ZIP ကို owner DM သို့ပို့ရန် |
+| 29 | `/startphoto` | PvP ပွဲဖွင့်ချိန်ပုံ တင်ရန် |
+| 30 | `/stopphoto` | PvP လောင်းကြေးပိတ်ချိန်ပုံ တင်ရန် |
+| 31 | `/resultphoto` | PvP ရလဒ်ပုံ တင်ရန် |
 
 `/start`, `/help`, `/panel`, `/draftcancel` ကိုလည်းသုံးနိုင်သည်။ ID ဆိုသည်မှာ post ထိပ်က `#1` ကဲ့သို့ auction ID ဖြစ်သည်; command မှာ `1` ဟုသာရေးပါ။
 
-Ban လုပ်ခြင်းသည် ယခင် bids များကို မဖျက်ပါ။ Winner နှင့်ပတ်သက်ပြီး လေလံဖျက်သိမ်းလိုလျှင် active ဖြစ်နေချိန် `/cancelauction` သုံးပါ။ `/close` နှင့် `/cancelauction` ပြီးသော auction ကို ပြန်ဖွင့်ခြင်းမပါ။ Active/publishing auctions ရှိနေစဉ် channel/group ပြောင်းမရပါ။ Running/Pending PvP ရှိနေချိန် PvP group ကို မပြောင်းနိုင်ပါ။
+Ban လုပ်ခြင်းသည် ယခင် bids များကို မဖျက်ပါ။ Winner နှင့်ပတ်သက်ပြီး လေလံဖျက်သိမ်းလိုလျှင် active ဖြစ်နေချိန် `/cancelauction` သုံးပါ။ `/close` နှင့် `/cancelauction` ပြီးသော auction ကို ပြန်ဖွင့်ခြင်းမပါ။ Active/publishing auctions ရှိနေစဉ် channel/group ပြောင်းမရပါ။ PvP group ပြောင်းပါက မပြီးသေးသောပွဲ၏ လောင်းကြေးကို refund ပြန်ပေးပြီး ယခင် group permissions ကို ပြန်ထားသည်။
 
-## PvP coin game
+## Shared PvP coin game
 
-Owner သည် bot private chat မှ `/setpvpgp -100…` ဖြင့် သီးခြား supergroup သတ်မှတ်ပါ။ Bot ကို အဲဒီ group ထဲထည့်ပါ။ Owner သည် game group မှ user message ကို reply လုပ်ပြီး `+$100` / `-$5` ပို့ကာ coin ထည့်/နုတ်နိုင်သည်။ Reply ကို bot လက်ခံရရန် bot ကို group admin ခန့်ပါ၊ သို့မဟုတ် @BotFather တွင် Group Privacy ကိုပိတ်ပါ။ PvP group command menu မှာ `/pvp`, `/bal`, `/bcoin` သုံးခုသာ ပေါ်မည်။ `/bal` သည် ကိုယ့်လက်ကျန်ကိုပြပြီး `/bcoin` ကို PvP game group ထဲမှာသာ coin gift ပို့ရန်သုံးပါ။
+`GROUP_ID` (သို့ owner DM မှ `/setgroup`) သတ်မှတ်ထားသော supergroup မှာပဲ ကစားနိုင်သည်။ Bot ကို admin ထားပြီး **Restrict Members** ခွင့်ပေးရမည်။ ခွင့်မရှိလျှင် ပွဲအသစ်မဖွင့်ပါ။
 
-ပြိုင်ဘက်၏ group message ကို reply လုပ်ပြီး `/pvp 250` သို့မဟုတ် 250 coin ထက်များသောပမာဏ ပို့ပါ။ Requester မှာ လောင်းကြေးပြည့်ရှိမှ request တင်နိုင်သည်။ ဖိတ်ခေါ်ခံရသူက **Confirm** လုပ်သည့်အချိန်တွင် နှစ်ဖက်စလုံး၏ လက်ကျန်နှင့် game slot ကိုပြန်စစ်ပြီး တစ်ယောက်စီ၏ wager ကိုဖယ်ထားသည်။ ဖိတ်ခေါ်ခံရသူက **Cancel** လုပ်နိုင်ပြီး requester ကလည်း pending request ကို cancel လုပ်နိုင်သည်။
+- Bot စပြီး 5 sec အကြာ worker စသည်။ ပွဲနံပါတ် `100001` မှစပြီး database counter ဖြင့် တိုးသည်။
+- ပွဲဖွင့် message ပို့ပြီးမှ **20 sec** လောင်းချိန် စတွက်သည်။ `/pvp 1000 h` = 🟦 H၊ `/pvp 500 l` = 🟥 L။ Button မပါပါ။
+- တစ်ယောက်တစ်ပွဲတစ်ကြိမ်၊ **250–30000 coin**။ လေလံအတွက် hold လုပ်ထားသော coin ကို မသုံးနိုင်ပါ။ Bet သိမ်းခြင်းနှင့် wallet နုတ်ခြင်းကို transaction တစ်ခုတည်းဖြင့်လုပ်သည်။
+- **18 sec** တွင် group default permissions မှ **Send Messages နှင့် Send Media** ပိတ်သည်။ Invite/pin စသည့် permissions ကို မပြောင်းပါ။ Group admin များကို Telegram default member permissions က မတားပါ။
+- **20 sec** ပြည့်လျှင် database က bet ပိတ်ပြီး PvP percentage animation ပြသည်။ နောက်ဆုံး H percentage ကို 1–49 သို့ 51–99 မှ ကျပန်းရွေးသည်။ L = 100 − H ဖြစ်ပြီး percentage ပိုများသောဘက်နိုင်သည်။ Animation frame သည် နောက်ဆုံးရလဒ်မဟုတ်ပါ။
+- အနိုင်ဘက် payout = **လောင်းကြေး + လောင်းကြေး × အနိုင်ဘက် percentage / 100**။ ရှုံးဘက် payout = 0။ Coin 0.01 အောက် အပိုင်းအစကို ဖြတ်သည်။ ဥပမာ H 64%: 1000 → 1640 coin၊ 500 → 820 coin။ L မှာ 250 လောင်းထားလျှင် total bet = 1750၊ total payout = **2460**၊ round profit = −710 coin။
+- Result တွင် player name၊ ဘက်၊ လောင်းကြေး၊ ပြန်ရငွေနှင့် အမှန်တကယ် totals ကို ပြသည်။ စာရှည်ပါက Telegram limit အတွင်း page ခွဲပို့သည်။
+- Result အားလုံးပို့ပြီးမှ မူလ Send Messages/Media permissions ကို ပြန်ထားသည်။ မူလကပိတ်ထားသောခွင့်ကို အတင်းမဖွင့်ပါ။ ပြီးလျှင် 10 sec နားပြီး နောက်ပွဲဖွင့်သည်။
+- PvP announcements၊ edits၊ bet receipts ကို တစ်ခါနှင့်တစ်ခါ အနည်းဆုံး 4 sec ခြားပို့ပြီး Telegram `RetryAfter` ကိုလိုက်နာသည်။ Receipts ကို စုပြီးပို့သည်။ ပွဲပြီးသွားလျှင် မပို့ရသေးသော receipt အစား result စာရင်းမှာ ကြည့်နိုင်သည်။ လူများချိန်တွင် receipts/animation/result နောက်ကျနိုင်သော်လည်း 20 sec deadline ကို မတိုးပါ။ အခြား bot features ၏ traffic နှင့် Telegram ကန့်သတ်ချက်များကြောင့် rate-limit လုံးဝမဖြစ်ဟု အာမမခံနိုင်ပါ။
+- Restart ဖြစ်လျှင် round၊ settled payouts နှင့် ပြန်ထားရန် permissions ကို MongoDB မှပြန်ယူသည်။ ပွဲအဟောင်းများ၏ pending invitations ကိုပိတ်ပြီး running duel/Boom လောင်းကြေးများကို upgrade တွင် တစ်ကြိမ်သာ refund ပြန်ပေးသည်။ Wallet/history ကိုမဖျက်ပါ။
 
-အတည်ပြုပြီးနောက် 50/50 ရလဒ်အတွက် animation bar ကို တစ်စက္ကန့်တစ်ကြိမ်၊ ၅ ကြိမ် update လုပ်သည်။ နောက်ဆုံးမှာ ဥပမာ 60/40 ပြလျှင် 60% ဘက်ကနိုင်သည်။ အနိုင်ရသူကို နှစ်ဖက် wager စုစုပေါင်း ပြန်ပေါင်းပေးပြီး ရှုံးသူ wager ကိုဆုံးရှုံးသည်။ Group တစ်ခုတွင် တစ်ချိန်တည်း running ပွဲ ၅ ပွဲအထိသာ ကစားနိုင်ပြီး user တစ်ယောက်သည် တစ်ပွဲတည်းသာ ဝင်နိုင်သည်။ ပွဲပြီး၍ slot လွတ်တိုင်း `1Round လူရှင်းပါပီ` အသိပေးစာတစ်စောင်ပို့သည်။
+### Owner photos
+
+Owner DM `/panel` မှ **startphoto / stopphoto / resultphoto** ကိုနှိပ်ပြီး photo ပို့ပါ။ Commands နဲ့လည်းရွေးနိုင်သည်။ `/startphoto clear` (သို့ stopphoto/resultphoto) နဲ့ configured photo ကိုဖယ်နိုင်သည်။ `/panel` နဲ့ photo upload ကိုရပ်နိုင်သည်။ ပုံကို Telegram file ID အဖြစ်သိမ်းပြီး message တစ်ခုတည်းတွင် phase အလိုက် photo/caption ပြောင်းသည်။ Phase photo မသတ်မှတ်ထားလျှင် လက်ရှိပုံ၏ caption သို့ text ကိုပြောင်းသည်။
+
+### Runtime and verification
+
+Auto loop နှင့် permission restoration အတွက် **အမြဲ run နေသော polling worker** (`python run.py`၊ Railway Dockerfile) တစ်ခုတည်းသုံးပါ။ Request ရှိချိန်မှ run သည့် serverless webhook သည် အချိန်မှန် auto loop အတွက် မသင့်ပါ။ Bot offline ဖြစ်ချိန် permissions ပြန်မဖွင့်နိုင်သဖြင့် process ကိုပြန်စရန် သို့ group admin က manual ပြန်ဖွင့်ရန်လိုသည်။
+
+```bash
+# Use a disposable MongoDB replica set. Each test creates/deletes a pvp_test_* database.
+PVP_TEST_MONGO_URI='mongodb://127.0.0.1:27017/?replicaSet=rs0' .venv/bin/python -m unittest discover -s tests -v
+```
+
+MongoDB URI မပါလျှင် integration tests ကို skip လုပ်သည်။ Tests တွင် Telegram API ကို mock လုပ်ထားပြီး live Telegram permissions/photos ကို deployment ပြီး သီးခြားစစ်ရမည်။
 
 PvP game group ထဲမှာသာ အခြား user ရဲ့ message ကို reply လုပ်ပြီး `/bcoin 100` ပို့လျှင် ကိုယ့် available balance မှ 100 coin ကို သူ့ balance ထဲ တစ်ခါတည်းပြောင်းပေးသည်။ ပမာဏသည် coin ဖြစ်ပြီး decimal ၂ နေရာအထိရသည်။ ကိုယ့်ကိုယ်ကို၊ bot ကို၊ anonymous/channel message ကို gift မပို့နိုင်ပါ။ Gift မပို့မီ sender ၏ available coin နှင့် receiver ၏ wallet limit ကိုစစ်သည်; လက်ကျန်စစ်ရန် `/bal` သုံးပါ။
 

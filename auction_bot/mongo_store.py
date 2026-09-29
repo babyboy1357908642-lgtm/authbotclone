@@ -5,12 +5,13 @@ import random
 from pymongo import MongoClient, ReturnDocument
 from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
+from .group_pvp_store import GroupPvPStore
 from .domain import BOOM_TURN_TIMEOUT_SECONDS, MAX_ACTIVE_PVP_GAMES, MAX_PVP_WAGER, MIN_PVP_WAGER, PVP_REQUEST_TIMEOUT_SECONDS, RuleError, money
 
 PVP_ANIMATION_INTERVAL_SECONDS = 1.2
 
 
-class MongoStore:
+class MongoStore(GroupPvPStore):
     def __init__(self, uri, database):
         self.client = MongoClient(uri, serverSelectionTimeoutMS=10000, connectTimeoutMS=10000,
                                   socketTimeoutMS=20000, appname="authbid-bot")
@@ -19,6 +20,7 @@ class MongoStore:
         if not hello.get("setName") and hello.get("msg") != "isdbgrid":
             self.close()
             raise ValueError("MongoDB replica set or Atlas is required for wallet transactions")
+        self.init_group_pvp()
         self.db.bids.create_index([("chat_id", 1), ("message_id", 1)], unique=True)
         self.db.bids.create_index([("user_id", 1), ("auction_id", 1), ("id", -1)])
         self.db.auctions.create_index([("status", 1), ("ends", 1)])
