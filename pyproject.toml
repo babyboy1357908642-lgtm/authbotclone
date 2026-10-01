@@ -1,12 +1,35 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "authbot-vercel"
-version = "0.0.0"
-requires-python = ">=3.11,<3.13"
+name = "waifu-card-bot"
+version = "1.0.0"
+description = "Telegram card collection, indexed lookup, image similarity"
+requires-python = ">=3.12"
 dependencies = [
-  "python-telegram-bot[job-queue]==21.11.1",
-  "python-dotenv==1.1.1",
-  "pymongo==4.18.2",
+  "httpx>=0.28,<0.29", "pymongo>=4.13,<5", "python-dotenv>=1.1,<2",
+  "Pillow>=11.3,<13", "ImageHash>=4.3,<5", "numpy>=2.2,<3",
 ]
 
-[tool.vercel]
-entrypoint = "api.webhook:handler"
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "pytest-asyncio>=1,<2", "ruff>=0.12,<1", "build>=1.2,<2"]
+
+[project.scripts]
+waifu-bot = "waifu_bot.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = ["integration: requires TEST_MONGO_URI pointing to a disposable MongoDB"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+ignore = ["E501"]

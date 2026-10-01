@@ -1,0 +1,87 @@
+{
+  "synthetic_cards": 100000,
+  "exact_lookup_samples": 100,
+  "exact_lookup_ms_p50": 0.918,
+  "exact_lookup_ms_p95": 1.285,
+  "hash_scan_ms_p50": 8.891,
+  "hash_scan_ms_p95": 9.596,
+  "hash_array_bytes": 1600000,
+  "query_plans": {
+    "telegram_files": {
+      "keys_examined": 1,
+      "documents_examined": 1,
+      "winning_plan": {
+        "isCached": false,
+        "stage": "EXPRESS_IXSCAN",
+        "keyPattern": "{ _id: 1 }",
+        "indexName": "_id_"
+      }
+    },
+    "card_assets": {
+      "keys_examined": 1,
+      "documents_examined": 1,
+      "winning_plan": {
+        "isCached": false,
+        "stage": "FETCH",
+        "filter": {
+          "verified": {
+            "$eq": true
+          }
+        },
+        "inputStage": {
+          "stage": "IXSCAN",
+          "keyPattern": {
+            "asset_id": 1
+          },
+          "indexName": "asset_id_1",
+          "isMultiKey": false,
+          "multiKeyPaths": {
+            "asset_id": []
+          },
+          "isUnique": false,
+          "isSparse": false,
+          "isPartial": false,
+          "indexVersion": 2,
+          "direction": "forward",
+          "indexBounds": {
+            "asset_id": [
+              "[\"asset-500\", \"asset-500\"]"
+            ]
+          }
+        }
+      }
+    },
+    "cards": {
+      "keys_examined": 1,
+      "documents_examined": 1,
+      "winning_plan": {
+        "isCached": false,
+        "stage": "FETCH",
+        "filter": {
+          "status": {
+            "$eq": "active"
+          }
+        },
+        "inputStage": {
+          "stage": "IXSCAN",
+          "keyPattern": {
+            "_id": 1
+          },
+          "indexName": "_id_",
+          "isMultiKey": false,
+          "isUnique": true,
+          "isSparse": false,
+          "isPartial": false,
+          "indexVersion": 2,
+          "direction": "forward",
+          "indexBounds": {
+            "_id": [
+              "[\"card-500\", \"card-500\"]"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "note": "Local synthetic benchmark, excludes Telegram network and image decoding; not a production SLA."
+}
